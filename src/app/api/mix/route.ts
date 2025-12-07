@@ -7,10 +7,10 @@ export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => ({}));
+    const body = await req.json();
     const mood = (body.mood as string | undefined)?.trim() || "chill";
 
-    // 1) Load all tracks
+    // 1) Load all tracks from DB
     const tracks = await prisma.track.findMany({
       orderBy: { uploadedAt: "desc" },
     });
@@ -22,46 +22,59 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2) Ask LLM (or fallback) which IDs to use
-    const { trackIds, usedAi } = await getAiPlaylist(mood, tracks);
+    // 2) Let AI (or heuristic) choose and order tracks
+    let selection: { trackId: number; order: number }[];
 
-    if (!trackIds.length) {
-      return NextResponse.json(
-        { error: "AI could not build a mix. Try a different mood." },
-        { status: 500 }
+    try {
+      selection = await getAiPlaylist(mood, tracks);
+    } catch (err) {
+      console.error("[llm] OpenAI error inside /api/mix:", err);
+
+      // Fallback heuristic: just take 3–6 most recent tracks
+      const min = 3;
+      const max = 6;
+      const count = Math.min(
+        Math.max(min, Math.floor(tracks.length / 2) || min),
+        max,
       );
+
+      selection = tracks.slice(0, count).map((t, index) => ({
+        trackId: t.id,
+        order: index,
+      }));
     }
 
-    // 3) Build ordered track list from those IDs
-    const trackMap = new Map(tracks.map((t) => [t.id, t]));
-    const orderedTracks = trackIds
-      .map((id, index) => {
-        const t = trackMap.get(id);
+    // 3) Build ordered track list (no DB playlist write here; we only return JSON)
+    const orderedTracks = selection
+      .map((sel) => {
+        const t = tracks.find((tr) => tr.id === sel.trackId);
         if (!t) return null;
         return {
           id: t.id,
           title: t.title,
           artist: t.artist,
           fileUrl: t.fileUrl,
-          moodTag: t.moodTag,
-          order: index,
+          order: sel.order,
         };
       })
-      .filter(Boolean) as {
+      .filter(Boolean)
+      .sort((a, b) => a!.order - b!.order) as {
       id: number;
       title: string;
       artist: string | null;
       fileUrl: string;
-      moodTag: string | null;
       order: number;
     }[];
 
     const response = {
-      id: null, // not stored as DB playlist
+      id: null, // not creating a Playlist row in DB in this simplified version
       name: `Mood Mix – ${mood}`,
       mood,
       createdAt: new Date().toISOString(),
-      source: usedAi ? "llm" : "heuristic",
+      source:
+        process.env.ENABLE_REMOTE_LLM === "true"
+          ? "llm+heuristic"
+          : "heuristic",
       tracks: orderedTracks,
     };
 
@@ -74,4 +87,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-        
