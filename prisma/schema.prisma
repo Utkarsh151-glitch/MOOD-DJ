@@ -1,0 +1,34 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Track {
+  id          Int              @id @default(autoincrement())
+  title       String
+  artist      String?
+  fileUrl     String
+  durationSec Int?
+  uploadedAt  DateTime         @default(now())
+  mixes       PlaylistTrack[]
+}
+
+model Mix {
+  id          Int              @id @default(autoincrement())
+  moodPrompt  String
+  createdAt   DateTime         @default(now())
+  tracks      PlaylistTrack[]
+}
+
+model PlaylistTrack {
+  id        Int   @id @default(autoincrement())
+  mix       Mix   @relation(fields: [mixId], references: [id])
+  mixId     Int
+  track     Track @relation(fields: [trackId], references: [id])
+  trackId   Int
+  order     Int
+  weight    Float
+}
