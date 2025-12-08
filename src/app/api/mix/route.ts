@@ -22,19 +22,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // infer type of one track from the array
-    type TrackRow = (typeof tracks)[number];
-
     let aiResult: AiPlaylistResult;
+
     try {
       aiResult = await getAiPlaylist(mood, tracks);
-    } catch (err) {
+    } catch (err: any) {
       console.error("[/api/mix] getAiPlaylist failed, using fallback:", err);
 
-      // explicit types so TS is happy
       const fallbackSelection = tracks
         .slice(0, Math.min(6, tracks.length))
-        .map((t: TrackRow, index: number): { trackId: number; order: number } => ({
+        .map((t: any, index: number) => ({
           trackId: t.id,
           order: index,
         }));
@@ -49,7 +46,7 @@ export async function POST(req: NextRequest) {
       data: {
         moodPrompt: mood,
         tracks: {
-          create: selection.map((item) => ({
+          create: selection.map((item: any) => ({
             trackId: item.trackId,
             order: item.order,
             weight: 1,
@@ -64,6 +61,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // Invalidate cached /stats/top-tracks
     clearTopTracksCache();
 
     const responsePayload = {
@@ -71,7 +69,7 @@ export async function POST(req: NextRequest) {
       mood: mix.moodPrompt,
       createdAt: mix.createdAt,
       source: aiResult.usedAi ? "openai" : "fallback",
-      tracks: mix.tracks.map((pt) => ({
+      tracks: mix.tracks.map((pt: any) => ({
         id: pt.track.id,
         title: pt.track.title,
         artist: pt.track.artist,
@@ -81,7 +79,7 @@ export async function POST(req: NextRequest) {
     };
 
     return NextResponse.json(responsePayload);
-  } catch (err) {
+  } catch (err: any) {
     console.error("[/api/mix] Error generating mix:", err);
     return NextResponse.json(
       { error: "Internal error generating mix" },
