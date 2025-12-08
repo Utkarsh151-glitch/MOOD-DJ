@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
+import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 
@@ -16,7 +17,7 @@ export async function GET(
   _req: NextRequest,
   context: { params: Promise<{ filename: string }> }
 ) {
-  // 🔑 Next.js gives params as a Promise in this route type, so we await it
+  // ✅ Next.js gives params as Promise in this type
   const { filename } = await context.params;
 
   if (!filename) {
@@ -28,7 +29,7 @@ export async function GET(
   try {
     const fileBuffer = await fs.readFile(filePath);
 
-    // ✅ Convert Node Buffer to Uint8Array so it's valid BodyInit for NextResponse
+    // ✅ Convert Node Buffer → Uint8Array for NextResponse
     const uint8 = new Uint8Array(fileBuffer);
 
     return new NextResponse(uint8, {

@@ -1,16 +1,16 @@
 // src/app/api/mix/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAiPlaylist } from "@/lib/llm";
+import { getAiPlaylist, AiPlaylistResult } from "@/lib/llm";
+import { clearTopTracksCache } from "@/lib/topTracksCache";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const mood = (body.mood as string | undefined)?.trim() || "chill";
 
-    // 1) Load all tracks from DB
     const tracks = await prisma.track.findMany({
       orderBy: { uploadedAt: "desc" },
     });
@@ -22,40 +22,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2) Get AI playlist (or heuristic, handled inside getAiPlaylist)
-    let trackIds = await getAiPlaylist(mood, tracks);
-
-    // Validate IDs against existing tracks
-    const validIdSet = new Set(tracks.map((t) => t.id));
-    trackIds = trackIds.filter((id) => validIdSet.has(id));
-
-    // If still too few, pad with recent tracks
-    if (trackIds.length < 3) {
-      const recentIds = tracks.map((t) => t.id);
-      for (const id of recentIds) {
-        if (trackIds.length >= 3) break;
-        if (!trackIds.includes(id)) {
-          trackIds.push(id);
-        }
-      }
-      trackIds = trackIds.slice(0, Math.min(6, trackIds.length));
+    let aiResult: AiPlaylistResult;
+    try {
+      aiResult = await getAiPlaylist(mood, tracks);
+    } catch (err) {
+      console.error("[/api/mix] getAiPlaylist failed, using fallback:", err);
+      const fallbackSelection = tracks
+        .slice(0, Math.min(6, tracks.length))
+        .map((t, index) => ({
+          trackId: t.id,
+          order: index,
+        }));
+      aiResult = { selection: fallbackSelection, usedAi: false };
     }
 
-    if (trackIds.length === 0) {
-      return NextResponse.json(
-        { error: "Could not generate a valid mix. Try uploading more tracks." },
-        { status: 400 }
-      );
-    }
+    const selection = aiResult.selection;
 
-    // 3) Save Mix + PlaylistTrack (your schema: Mix + PlaylistTrack)
+    // Save Mix + PlaylistTrack rows
     const mix = await prisma.mix.create({
       data: {
         moodPrompt: mood,
         tracks: {
-          create: trackIds.map((trackId, index) => ({
-            track: { connect: { id: trackId } },
-            order: index,
+          create: selection.map((item) => ({
+            trackId: item.trackId,
+            order: item.order,
             weight: 1,
           })),
         },
@@ -68,25 +58,23 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // 4) Shape response for frontend
-    const orderedTracks = mix.tracks.map((mt) => ({
-      id: mt.track.id,
-      title: mt.track.title,
-      artist: mt.track.artist,
-      fileUrl: mt.track.fileUrl,
-      order: mt.order,
-    }));
+    clearTopTracksCache();
 
-    const response = {
+    const responsePayload = {
       id: mix.id,
-      name: `Mood Mix – ${mood}`,
-      mood,
+      mood: mix.moodPrompt,
       createdAt: mix.createdAt,
-      source: process.env.OPENAI_API_KEY ? "llm+fallback" : "heuristic",
-      tracks: orderedTracks,
+      source: aiResult.usedAi ? "openai" : "fallback",
+      tracks: mix.tracks.map((pt) => ({
+        id: pt.track.id,
+        title: pt.track.title,
+        artist: pt.track.artist,
+        fileUrl: pt.track.fileUrl,
+        order: pt.order,
+      })),
     };
 
-    return NextResponse.json(response);
+    return NextResponse.json(responsePayload);
   } catch (err) {
     console.error("[/api/mix] Error generating mix:", err);
     return NextResponse.json(

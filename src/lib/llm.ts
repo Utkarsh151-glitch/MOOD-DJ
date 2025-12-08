@@ -1,100 +1,97 @@
 // src/lib/llm.ts
 import OpenAI from "openai";
-import { Track } from "@prisma/client";
 
-const openai = new OpenAI({
+const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-/**
- * Returns an array of track IDs (number[]) chosen for the mood.
- * Uses OpenAI if API key is present, otherwise falls back to heuristic.
- */
-export async function getAiPlaylist(mood: string, tracks: Track[]): Promise<number[]> {
-  // If no key, skip remote LLM and use heuristic.
-  if (!process.env.OPENAI_API_KEY) {
-    console.warn("[llm] No OPENAI_API_KEY set, using heuristic playlist.");
-    return heuristicPlaylist(mood, tracks);
+export interface AiPlaylistResult {
+  selection: { trackId: number; order: number }[];
+  usedAi: boolean;
+}
+
+// mood + list of tracks in, selection out
+export async function getAiPlaylist(
+  mood: string,
+  tracks: { id: number; title: string; artist: string | null }[]
+): Promise<AiPlaylistResult> {
+  const FALLBACK_COUNT = Math.min(6, Math.max(3, tracks.length));
+
+  // If no key configured -> pure heuristic
+  if (!client.apiKey) {
+    const selection = tracks.slice(0, FALLBACK_COUNT).map((t, idx) => ({
+      trackId: t.id,
+      order: idx,
+    }));
+    return { selection, usedAi: false };
   }
 
-  if (tracks.length === 0) return [];
+  try {
+    const trackList = tracks
+      .map((t) => `- ${t.id}: "${t.title}" by ${t.artist ?? "Unknown"}`)
+      .join("\n");
 
-  // Build track list context
-  const trackLines = tracks
-    .map((t) => `- ${t.id}: "${t.title}" by ${t.artist ?? "Unknown"}`)
-    .join("\n");
-
-  const prompt = `
-You are an assistant that creates playlists.
-
-The user will give you a mood description. You will see a list of tracks, each with an ID.
-Pick between 3 and 6 track IDs that match the mood. 
-
-ONLY reply with a JSON array of numbers (track IDs). Example:
-[1, 3, 7]
-
-User mood: "${mood}"
+    const prompt = `
+You are a music DJ. User mood: "${mood}".
 
 Available tracks:
-${trackLines}
-  `.trim();
+${trackList}
 
-  try {
-    const completion: any = await openai.chat.completions.create({
+Return ONLY a JSON array of objects, each having:
+- "trackId" (number, from the list above)
+- "order" (integer starting at 0 for first song in mix)
+
+Example:
+[
+  { "trackId": 1, "order": 0 },
+  { "trackId": 3, "order": 1 }
+]
+`;
+
+    const response = await client.responses.create({
       model: "gpt-4.1-mini",
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      temperature: 0.7,
-    });
+      input: prompt,
+    } as any);
 
-    const raw = completion.choices?.[0]?.message?.content ?? "[]";
+    const text =
+      (response as any)?.output?.[0]?.content?.[0]?.text?.value ??
+      JSON.stringify([]);
 
     let parsed: any;
     try {
-      parsed = JSON.parse(raw);
+      parsed = JSON.parse(text);
     } catch {
-      // Handle ```json ... ``` wrapping
-      const cleaned = raw
-        .replace(/```json/gi, "")
-        .replace(/```/g, "")
-        .trim();
-      parsed = JSON.parse(cleaned || "[]");
+      parsed = [];
     }
 
-    const allIds = tracks.map((t) => t.id);
-    const validIdSet = new Set(allIds);
-
-    const fromModel =
-      Array.isArray(parsed)
-        ? parsed.filter(
-            (id) => typeof id === "number" && validIdSet.has(id)
-          )
-        : [];
-
-    if (fromModel.length >= 3) {
-      return fromModel.slice(0, 6);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      throw new Error("Empty or invalid LLM result");
     }
 
-    console.warn("[llm] Model returned too few valid IDs, falling back to heuristic.");
+    const selection = parsed
+      .map((item: any) => ({
+        trackId: Number(item.trackId),
+        order: Number(item.order),
+      }))
+      .filter(
+        (item) =>
+          Number.isFinite(item.trackId) && Number.isFinite(item.order)
+      );
+
+    if (selection.length === 0) {
+      throw new Error("No valid playlist items after parsing");
+    }
+
+    return { selection, usedAi: true };
   } catch (err) {
     console.error("[llm] OpenAI error:", err);
+
+    // Fallback: simple heuristic on local tracks
+    const fallbackTracks = tracks.slice(0, FALLBACK_COUNT);
+    const selection = fallbackTracks.map((t, idx) => ({
+      trackId: t.id,
+      order: idx,
+    }));
+    return { selection, usedAi: false };
   }
-
-  // Fallback if anything goes wrong
-  return heuristicPlaylist(mood, tracks);
-}
-
-/**
- * Simple local fallback: shuffle tracks and pick 3–6.
- */
-function heuristicPlaylist(_mood: string, tracks: Track[]): number[] {
-  if (tracks.length === 0) return [];
-
-  const shuffled = [...tracks].sort(() => Math.random() - 0.5);
-  const count = Math.min(6, Math.max(3, shuffled.length));
-  return shuffled.slice(0, count).map((t) => t.id);
 }

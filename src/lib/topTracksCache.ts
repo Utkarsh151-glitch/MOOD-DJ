@@ -1,27 +1,30 @@
 // src/lib/topTracksCache.ts
-export type TopTrack = {
+
+type TopTrack = {
   id: number;
   title: string;
   artist: string | null;
   fileUrl: string;
-  timesUsed: number;
+  uses: number;
 };
 
-let cache: { data: TopTrack[]; expiresAt: number } | null = null;
-const TTL_MS = 60_000; // 1 minute
+let cached: TopTrack[] | null = null;
+let expiresAt = 0;
+const TTL_MS = 60_000; // 60 seconds
 
-export function getTopTracksFromCache(): TopTrack[] | null {
-  if (!cache) return null;
-  if (Date.now() > cache.expiresAt) {
-    cache = null;
+export function getTopTracksCache(): TopTrack[] | null {
+  if (!cached || Date.now() > expiresAt) {
     return null;
   }
-  return cache.data;
+  return cached;
 }
 
 export function setTopTracksCache(data: TopTrack[]) {
-  cache = {
-    data,
-    expiresAt: Date.now() + TTL_MS,
-  };
+  cached = data;
+  expiresAt = Date.now() + TTL_MS;
+}
+
+export function clearTopTracksCache() {
+  cached = null;
+  expiresAt = 0;
 }

@@ -6,65 +6,65 @@ import path from "path";
 
 export const runtime = "nodejs";
 
-// 🟢 GET /api/tracks  → list all tracks
+// GET /api/tracks → list tracks
 export async function GET() {
   try {
     const tracks = await prisma.track.findMany({
       orderBy: { uploadedAt: "desc" },
     });
-
     return NextResponse.json(tracks);
   } catch (err) {
-    console.error("Error fetching tracks:", err);
+    console.error("[GET /api/tracks] error:", err);
     return NextResponse.json(
-      { error: "Failed to fetch tracks" },
+      { error: "Failed to load tracks" },
       { status: 500 }
     );
   }
 }
 
-// 🟢 POST /api/tracks  → upload a new track
+// POST /api/tracks → upload new track
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
-    const file = formData.get("file") as File | null;
-    const title = (formData.get("title") as string | null) || "Untitled";
-    const artist = (formData.get("artist") as string | null) || "Unknown";
 
-    if (!file) {
+    const file = formData.get("file");
+    const title = (formData.get("title") as string) || "Untitled";
+    const artist = (formData.get("artist") as string) || null;
+    const originalName =
+      (formData.get("originalName") as string) || "upload.mp3";
+
+    if (!file || !(file instanceof Blob)) {
       return NextResponse.json(
-        { error: "No file uploaded" },
+        { error: "Audio file is required" },
         { status: 400 }
       );
     }
 
-    // Ensure uploads folder exists
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
     const uploadsDir = path.join(process.cwd(), "uploads");
     await fs.mkdir(uploadsDir, { recursive: true });
 
-    // Clean name + unique prefix
-    const safeName = file.name.replace(/[^a-zA-Z0-9.\-_ ]/g, "_");
-    const uniqueName = `${Date.now()}-${safeName}`;
-    const filePath = path.join(uploadsDir, uniqueName);
+    const safeName = `${Date.now()}-${originalName}`.replace(
+      /[^a-zA-Z0-9.\-_ ]/g,
+      "_"
+    );
+    const filePath = path.join(uploadsDir, safeName);
 
-    // Write file to disk
-    const arrayBuffer = await file.arrayBuffer();
-    await fs.writeFile(filePath, Buffer.from(arrayBuffer));
-
-    // URL used by the audio player
-    const fileUrl = `/api/audio/${encodeURIComponent(uniqueName)}`;
+    await fs.writeFile(filePath, buffer);
 
     const track = await prisma.track.create({
       data: {
         title,
         artist,
-        fileUrl,
+        fileUrl: `/api/audio/${encodeURIComponent(safeName)}`,
       },
     });
 
     return NextResponse.json(track, { status: 201 });
   } catch (err) {
-    console.error("Error uploading track:", err);
+    console.error("[POST /api/tracks] error:", err);
     return NextResponse.json(
       { error: "Failed to upload track" },
       { status: 500 }
