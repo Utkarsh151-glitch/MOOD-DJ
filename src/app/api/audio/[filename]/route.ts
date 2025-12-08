@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
 
-const UPLOAD_DIR = path.join(process.cwd(), "uploads");
+export const runtime = "nodejs";
 
 function getContentType(filename: string) {
   const lower = filename.toLowerCase();
@@ -13,43 +13,40 @@ function getContentType(filename: string) {
 }
 
 export async function GET(
-  req: NextRequest,
-  { params }: { params: { filename: string } }
+  _req: NextRequest,
+  context: { params: Promise<{ filename: string }> }
 ) {
-  const { filename } = params;
+  // 🔑 Next.js gives params as a Promise in this route type, so we await it
+  const { filename } = await context.params;
 
-  if (!filename || filename.includes("..")) {
-    return NextResponse.json(
-      { error: "Invalid filename" },
-      { status: 400 }
-    );
+  if (!filename) {
+    return NextResponse.json({ error: "Filename is required" }, { status: 400 });
   }
 
-  const filePath = path.join(UPLOAD_DIR, filename);
+  const filePath = path.join(process.cwd(), "uploads", filename);
 
   try {
     const fileBuffer = await fs.readFile(filePath);
 
-    // 👇 The important part: cast Buffer → BodyInit for TS
-    return new NextResponse(fileBuffer as unknown as BodyInit, {
+    // ✅ Convert Node Buffer to Uint8Array so it's valid BodyInit for NextResponse
+    const uint8 = new Uint8Array(fileBuffer);
+
+    return new NextResponse(uint8, {
       status: 200,
       headers: {
         "Content-Type": getContentType(filename),
-        "Content-Disposition": `inline; filename="${filename}"`,
+        "Cache-Control": "public, max-age=31536000, immutable",
       },
     });
   } catch (err: any) {
-    console.error("Error reading audio file:", err);
-
-    if (err?.code === "ENOENT") {
-      return NextResponse.json(
-        { error: "File not found" },
-        { status: 404 }
-      );
+    if (err.code === "ENOENT") {
+      console.error("File not found at path:", filePath);
+      return NextResponse.json({ error: "File not found" }, { status: 404 });
     }
 
+    console.error("Error reading file:", err);
     return NextResponse.json(
-      { error: "Error reading file" },
+      { error: "Error reading audio file" },
       { status: 500 }
     );
   }
