@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAiPlaylist, AiPlaylistResult } from "@/lib/llm";
 import { clearTopTracksCache } from "@/lib/topTracksCache";
+import type { Track } from "@prisma/client"; // ✅ add this
 
 export const runtime = "nodejs";
 
@@ -11,7 +12,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const mood = (body.mood as string | undefined)?.trim() || "chill";
 
-    const tracks = await prisma.track.findMany({
+    // ✅ give tracks a proper type
+    const tracks: Track[] = await prisma.track.findMany({
       orderBy: { uploadedAt: "desc" },
     });
 
@@ -27,12 +29,15 @@ export async function POST(req: NextRequest) {
       aiResult = await getAiPlaylist(mood, tracks);
     } catch (err) {
       console.error("[/api/mix] getAiPlaylist failed, using fallback:", err);
+
+      // ✅ explicitly type `t` and `index`
       const fallbackSelection = tracks
         .slice(0, Math.min(6, tracks.length))
-        .map((t, index) => ({
+        .map((t: Track, index: number) => ({
           trackId: t.id,
           order: index,
         }));
+
       aiResult = { selection: fallbackSelection, usedAi: false };
     }
 
