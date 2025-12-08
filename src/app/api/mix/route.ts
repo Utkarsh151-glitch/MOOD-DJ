@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAiPlaylist, AiPlaylistResult } from "@/lib/llm";
 import { clearTopTracksCache } from "@/lib/topTracksCache";
-import type { Track } from "@prisma/client"; // ✅ add this
 
 export const runtime = "nodejs";
 
@@ -12,8 +11,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const mood = (body.mood as string | undefined)?.trim() || "chill";
 
-    // ✅ give tracks a proper type
-    const tracks: Track[] = await prisma.track.findMany({
+    const tracks = await prisma.track.findMany({
       orderBy: { uploadedAt: "desc" },
     });
 
@@ -24,16 +22,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // infer type of one track from the array
+    type TrackRow = (typeof tracks)[number];
+
     let aiResult: AiPlaylistResult;
     try {
       aiResult = await getAiPlaylist(mood, tracks);
     } catch (err) {
       console.error("[/api/mix] getAiPlaylist failed, using fallback:", err);
 
-      // ✅ explicitly type `t` and `index`
+      // explicit types so TS is happy
       const fallbackSelection = tracks
         .slice(0, Math.min(6, tracks.length))
-        .map((t: Track, index: number) => ({
+        .map((t: TrackRow, index: number): { trackId: number; order: number } => ({
           trackId: t.id,
           order: index,
         }));
