@@ -22,59 +22,67 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2) Let AI (or heuristic) choose and order tracks
-    let selection: { trackId: number; order: number }[];
+    // 2) Get AI playlist (or heuristic, handled inside getAiPlaylist)
+    let trackIds = await getAiPlaylist(mood, tracks);
 
-    try {
-      selection = await getAiPlaylist(mood, tracks);
-    } catch (err) {
-      console.error("[llm] OpenAI error inside /api/mix:", err);
+    // Validate IDs against existing tracks
+    const validIdSet = new Set(tracks.map((t) => t.id));
+    trackIds = trackIds.filter((id) => validIdSet.has(id));
 
-      // Fallback heuristic: just take 3–6 most recent tracks
-      const min = 3;
-      const max = 6;
-      const count = Math.min(
-        Math.max(min, Math.floor(tracks.length / 2) || min),
-        max,
-      );
-
-      selection = tracks.slice(0, count).map((t, index) => ({
-        trackId: t.id,
-        order: index,
-      }));
+    // If still too few, pad with recent tracks
+    if (trackIds.length < 3) {
+      const recentIds = tracks.map((t) => t.id);
+      for (const id of recentIds) {
+        if (trackIds.length >= 3) break;
+        if (!trackIds.includes(id)) {
+          trackIds.push(id);
+        }
+      }
+      trackIds = trackIds.slice(0, Math.min(6, trackIds.length));
     }
 
-    // 3) Build ordered track list (no DB playlist write here; we only return JSON)
-    const orderedTracks = selection
-      .map((sel) => {
-        const t = tracks.find((tr) => tr.id === sel.trackId);
-        if (!t) return null;
-        return {
-          id: t.id,
-          title: t.title,
-          artist: t.artist,
-          fileUrl: t.fileUrl,
-          order: sel.order,
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => a!.order - b!.order) as {
-      id: number;
-      title: string;
-      artist: string | null;
-      fileUrl: string;
-      order: number;
-    }[];
+    if (trackIds.length === 0) {
+      return NextResponse.json(
+        { error: "Could not generate a valid mix. Try uploading more tracks." },
+        { status: 400 }
+      );
+    }
+
+    // 3) Save Mix + PlaylistTrack (your schema: Mix + PlaylistTrack)
+    const mix = await prisma.mix.create({
+      data: {
+        moodPrompt: mood,
+        tracks: {
+          create: trackIds.map((trackId, index) => ({
+            track: { connect: { id: trackId } },
+            order: index,
+            weight: 1,
+          })),
+        },
+      },
+      include: {
+        tracks: {
+          include: { track: true },
+          orderBy: { order: "asc" },
+        },
+      },
+    });
+
+    // 4) Shape response for frontend
+    const orderedTracks = mix.tracks.map((mt) => ({
+      id: mt.track.id,
+      title: mt.track.title,
+      artist: mt.track.artist,
+      fileUrl: mt.track.fileUrl,
+      order: mt.order,
+    }));
 
     const response = {
-      id: null, // not creating a Playlist row in DB in this simplified version
+      id: mix.id,
       name: `Mood Mix – ${mood}`,
       mood,
-      createdAt: new Date().toISOString(),
-      source:
-        process.env.ENABLE_REMOTE_LLM === "true"
-          ? "llm+heuristic"
-          : "heuristic",
+      createdAt: mix.createdAt,
+      source: process.env.OPENAI_API_KEY ? "llm+fallback" : "heuristic",
       tracks: orderedTracks,
     };
 
