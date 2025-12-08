@@ -8,10 +8,6 @@ Mood DJ is a **full-stack Next.js application** that lets users:
 - Play tracks directly in the browser
 - See **Top Tracks** computed via **DB aggregation + caching**
 
-> ✅ **Evaluation focus:** backend architecture, DB schema, caching strategy, clean APIs, working playback, and README clarity.
-
----
-
 ## 🚀 Tech Stack
 
 **Frontend**
