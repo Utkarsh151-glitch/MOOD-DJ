@@ -1,0 +1,9 @@
+{
+  "createdAt": "2026-03-01T16:48:02.072Z",
+  "entries": [
+    {
+      "filePath": "package.json",
+      "originalContent": "{\n  \"name\": \"mood-dj\",\n  \"version\": \"0.1.0\",\n  \"private\": true,\n  \"scripts\": {\n    \"dev\": \"next dev\",\n    \"build\": \"next build\",\n    \"start\": \"next start\",\n    \"lint\": \"eslint\"\n  },\n  \"dependencies\": {\n    \"@google/genai\": \"^1.31.0\",\n    \"@google/generative-ai\": \"^0.24.1\",\n    \"@prisma/adapter-pg\": \"^7.1.0\",\n    \"@prisma/client\": \"^7.1.0\",\n    \"next\": \"16.0.7\",\n    \"openai\": \"^6.10.0\",\n    \"prisma\": \"^7.1.0\",\n    \"react\": \"19.2.0\",\n    \"react-dom\": \"19.2.0\"\n  },\n  \"devDependencies\": {\n    \"@tailwindcss/postcss\": \"^4\",\n    \"@types/node\": \"^20.19.25\",\n    \"@types/react\": \"^19\",\n    \"@types/react-dom\": \"^19\",\n    \"eslint\": \"^9\",\n    \"eslint-config-next\": \"16.0.7\",\n    \"tailwindcss\": \"^4\",\n    \"typescript\": \"^5\"\n  },\n  \"engines\": {\n    \"node\": \">=20\"\n  }\n}\n"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "createdAt": "2026-03-01T16:48:02.044Z",
+  "entries": [
+    {
+      "filePath": "package.json",
+      "originalContent": "{\r\n  \"name\": \"mood-dj\",\r\n  \"version\": \"0.1.0\",\r\n  \"private\": true,\r\n  \"scripts\": {\r\n    \"dev\": \"next dev\",\r\n    \"build\": \"next build\",\r\n    \"start\": \"next start\",\r\n    \"lint\": \"eslint\"\r\n  },\r\n  \"dependencies\": {\r\n    \"@google/genai\": \"^1.31.0\",\r\n    \"@google/generative-ai\": \"^0.24.1\",\r\n    \"@prisma/adapter-pg\": \"^7.1.0\",\r\n    \"@prisma/client\": \"^7.1.0\",\r\n    \"next\": \"16.0.7\",\r\n    \"openai\": \"^6.10.0\",\r\n    \"prisma\": \"^7.1.0\",\r\n    \"react\": \"19.2.0\",\r\n    \"react-dom\": \"19.2.0\"\r\n  },\r\n  \"devDependencies\": {\r\n    \"@tailwindcss/postcss\": \"^4\",\r\n    \"@types/node\": \"^20.19.25\",\r\n    \"@types/react\": \"^19\",\r\n    \"@types/react-dom\": \"^19\",\r\n    \"eslint\": \"^9\",\r\n    \"eslint-config-next\": \"16.0.7\",\r\n    \"tailwindcss\": \"^4\",\r\n    \"typescript\": \"^5\"\r\n  }\r\n}\r\n"
+    },
+    {
+      "filePath": "vercel.json",
+      "originalContent": ""
+    }
+  ]
+}

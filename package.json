@@ -28,5 +28,17 @@
     "eslint-config-next": "16.0.7",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devoployAi": {
+    "enabled": true,
+    "mode": "local-heuristic",
+    "strategy": "rule-guided ai fallback",
+    "detectedIssues": [
+      "INCOMPATIBLE_NODE_ENGINE"
+    ],
+    "generatedAt": "2026-03-01T16:48:02.072Z"
   }
 }
