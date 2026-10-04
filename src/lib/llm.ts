@@ -59,9 +59,10 @@ Example:
       input: prompt,
     } as any);
 
-    const text =
-      (response as any)?.output?.[0]?.content?.[0]?.text?.value ??
-      JSON.stringify([]);
+    // Responses API: output_text joins the text parts; strip ```json fences if the model adds them.
+    const text = String((response as any)?.output_text ?? "[]")
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/, "");
 
     let parsed: any;
     try {
