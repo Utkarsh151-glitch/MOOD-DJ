@@ -1,9 +1,14 @@
 // src/lib/llm.ts
 import OpenAI from "openai";
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let client: OpenAI | null = null;
+
+// Only construct the SDK client when a key exists; the constructor throws without one.
+function getClient(): OpenAI | null {
+  if (!process.env.OPENAI_API_KEY) return null;
+  client ??= new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return client;
+}
 
 export interface AiPlaylistResult {
   selection: { trackId: number; order: number }[];
@@ -18,7 +23,8 @@ export async function getAiPlaylist(
   const FALLBACK_COUNT = Math.min(6, Math.max(3, tracks.length));
 
   // If no key configured -> pure heuristic
-  if (!client.apiKey) {
+  const client = getClient();
+  if (!client) {
     const selection = tracks.slice(0, FALLBACK_COUNT).map((t, idx) => ({
       trackId: t.id,
       order: idx,
@@ -53,9 +59,10 @@ Example:
       input: prompt,
     } as any);
 
-    const text =
-      (response as any)?.output?.[0]?.content?.[0]?.text?.value ??
-      JSON.stringify([]);
+    // Responses API: output_text joins the text parts; strip ```json fences if the model adds them.
+    const text = String((response as any)?.output_text ?? "[]")
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/, "");
 
     let parsed: any;
     try {

@@ -8,6 +8,9 @@ Mood DJ is a **full-stack Next.js application** that lets users:
 - Play tracks directly in the browser
 - See **Top Tracks** computed via **DB aggregation + caching**
 
+
+![Mood DJ home screen with seeded sample tracks](docs/screenshots/home.png)
+
 ## 🚀 Tech Stack
 
 **Frontend**
@@ -48,9 +51,9 @@ Mood DJ is a **full-stack Next.js application** that lets users:
 
 - **Save generated mix**
   - Mixes are represented by:
-    - `Playlist` – the mix (name, mood, createdAt)
-    - `PlaylistTrack` – join table between `Playlist` and `Track` with `order` field.
-  - `/api/mix` creates a `Playlist` + `PlaylistTrack` rows when a mix is generated successfully.
+    - `Mix` – the generated mix (mood, createdAt)
+    - `PlaylistTrack` – join table between `Mix` and `Track` with `order` field.
+  - `/api/mix` creates `Mix` + `PlaylistTrack` rows when a mix is generated successfully.
 
 - **Track usage stats**
   - Each time a track is selected into a mix, a `PlaylistTrack` row is created.
@@ -81,7 +84,7 @@ Mood DJ is a **full-stack Next.js application** that lets users:
 ### High-Level Flow
 
 1. **Upload**
-   - User selects an audio file and metadata (title, artist, optional mood tag).
+   - User selects an audio file and metadata (title, artist).
    - Frontend sends `POST /api/tracks` with `FormData`.
    - Backend:
      - Saves file into `uploads/` folder.
@@ -107,7 +110,7 @@ Mood DJ is a **full-stack Next.js application** that lets users:
        - Log error.
        - Use heuristic selection:
          - Sort recent tracks.
-         - Select 3–6 based on simple rules (e.g. random + moodTag filter).
+         - Take the 3–6 most recently uploaded tracks.
        - Still create DB entries so **stats remain correct**.
      - Returns an ordered list of tracks to the frontend.
 
@@ -128,25 +131,59 @@ model Track {
   title       String
   artist      String?
   fileUrl     String
-  moodTag     String?
   durationSec Int?
   uploadedAt  DateTime         @default(now())
   mixes       PlaylistTrack[]
 }
 
-model Playlist {
-  id        Int              @id @default(autoincrement())
-  name      String
-  mood      String
-  createdAt DateTime         @default(now())
-  tracks    PlaylistTrack[]
+model Mix {
+  id          Int              @id @default(autoincrement())
+  moodPrompt  String
+  createdAt   DateTime         @default(now())
+  tracks      PlaylistTrack[]
 }
 
 model PlaylistTrack {
-  id         Int       @id @default(autoincrement())
-  playlist   Playlist  @relation(fields: [playlistId], references: [id])
-  playlistId Int
-  track      Track     @relation(fields: [trackId], references: [id])
-  trackId    Int
-  order      Int
+  id        Int   @id @default(autoincrement())
+  mix       Mix   @relation(fields: [mixId], references: [id])
+  mixId     Int
+  track     Track @relation(fields: [trackId], references: [id])
+  trackId   Int
+  order     Int
+  weight    Float
 }
+```
+
+---
+
+## 🚀 Getting started
+
+**Prerequisites:** Node.js 20+ and a PostgreSQL database (a free [Neon](https://neon.tech) database works).
+
+```bash
+npm install
+cp .env.example .env          # set DATABASE_URL; OPENAI_API_KEY is optional
+npx prisma db push            # create the Track, Mix and PlaylistTrack tables
+npm run dev                   # http://localhost:3000
+```
+
+Without `OPENAI_API_KEY`, mixes use the fallback (the most recent 3–6 tracks).
+
+**Demo data:** `POST /api/dev/seed-tracks` adds three royalty-free samples hosted by samplelib.com:
+
+```bash
+curl -X POST http://localhost:3000/api/dev/seed-tracks
+```
+
+## 🎵 Audio files
+
+Uploads are saved to `uploads/`, which is git-ignored. Use music you own or have the rights to share.
+
+## ⚠️ Known limitations
+
+- Uploaded files are written to local disk, which does not persist on serverless hosts such as Vercel or Netlify; production use needs object storage (for example S3 or R2).
+- No authentication; the `/api/dev/seed-tracks` route is open.
+
+## 📄 License
+
+MIT. See [LICENSE](LICENSE).
